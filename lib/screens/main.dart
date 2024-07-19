@@ -3,8 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'constants/constants.dart';
-import 'constants/firebase_setup.dart';
+import '../constants/constants.dart';
+import '../constants/firebase_setup.dart';
+import 'admin_page.dart';
+
 
 String loggedInUser = '';
 DocumentSnapshot<Object?>? loggedInUserDoc;
@@ -14,16 +16,6 @@ String? inputPresent;
 DocumentSnapshot<Object?>? buildingDoc;
 List<QueryDocumentSnapshot<Object?>>? allDocs;
 
-String timeAgo(Timestamp inTime) {
-  DateTime inDateTime = DateTime.fromMicrosecondsSinceEpoch(inTime.seconds * 1000000);
-  Duration deltaTime = DateTime.now().difference(inDateTime);
-  // if (deltaTime.inMinutes < 60) return "00:${deltaTime.inMinutes.toString().padLeft(2,'0')} ago";
-  int minutes = deltaTime.inMinutes - 60 * deltaTime.inHours;
-  if (deltaTime.inHours < 24) {
-    return '${deltaTime.inHours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')} ago';
-  }
-  return ('${deltaTime.inDays} days ago');
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -153,7 +145,7 @@ class _MyHomePageState extends State<MyHomePage> {
       _inGetUserDoc = false;
       return doc;
     }
-    
+
     print('ERROR: specified user doc $testUser does not exist');
     buildingDoc = null;
     _inGetUserDoc = false;
@@ -338,7 +330,6 @@ class _MyHomePageState extends State<MyHomePage> {
         .doc(user.id)
         .update({
       'Present': state,
-      state ? 'LastTimePresent' : 'LastTimeAway': DateTime.now(),
       'LastUpdatedBy': loggedInUser,
     });
   }
@@ -372,13 +363,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       },
                       icon: const Icon(Icons.house_outlined)),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(18.0),
-                  child: Text(
-                    userDoc.get('Present') ? timeAgo(userDoc.get('LastTimePresent')) : ' ',
-                    style: nameStyle,
-                  ),
-                ),
+
               ],
             ),
             Column(
@@ -397,17 +382,56 @@ class _MyHomePageState extends State<MyHomePage> {
                       },
                       icon: const Icon(Icons.exit_to_app)),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(18.0),
-                  child: Text(
-                    !userDoc.get('Present') ? timeAgo(userDoc.get('LastTimeAway')) : ' ',
-                    style: nameStyle,
-                  ),
-                ),
+
               ],
             ),
           ],
         ),
+      if (!userDoc.get('Resident'))
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Column(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: userDoc.get('Present') ? Colors.green : Colors.transparent, width: 8),
+                  ),
+                  child: IconButton(
+                      iconSize: 70,
+                      onPressed: () {
+                        // print('CLICKED: present');
+                        setState(() {
+                          setPresent(userDoc, true);
+                        });
+                      },
+                      icon: const Icon(Icons.insert_emoticon)),
+                ),
+
+              ],
+            ),
+            Column(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: !userDoc.get('Present') ? Colors.green : Colors.transparent, width: 8),
+                  ),
+                  child: IconButton(
+                      iconSize: 70,
+                      onPressed: () {
+                        // print('CLICKED: away');
+                        setState(() {
+                          setPresent(userDoc, false);
+                        });
+                      },
+                      icon: const Icon(Icons.exit_to_app)),
+                ),
+
+              ],
+            ),
+          ],
+        ),
+      // const Divider(
       // const Divider(
       //   thickness: 2,
       // ),
@@ -498,6 +522,8 @@ class _MyHomePageState extends State<MyHomePage> {
             .collection('Customer')
             .snapshots(),
         builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+          loggedInUserDoc = null;
+          allDocs = null;
           if (snapshot.error != null) {
             String error = 'Snapshot error: ${snapshot.error.toString()} on getting doc $buildingId / $loggedInUser';
             if (kDebugMode) {
@@ -509,11 +535,15 @@ class _MyHomePageState extends State<MyHomePage> {
           if (!snapshot.hasData) return const CircularProgressIndicator();
 
           if (snapshot.data == null) return const CircularProgressIndicator();
+          if (snapshot.requireData.docs.length<=1) return const CircularProgressIndicator();
 
           allDocs = snapshot.requireData.docs;
-          // print('allDocs: allDocs');
-          // print('allDocs: ${allDocs!.length}');
+          // print('allDocs1: ${allDocs![0].id}');
+          // print('allDocs2: ${allDocs!.length} ');
           loggedInUserDoc = allDocs!.firstWhere((doc) => doc.id == loggedInUser);
+
+          if (loggedInUserDoc == null) return Text('Cannot find a customer with email $loggedInUser');
+
 
           List<String> travelWith = loggedInUserDoc!.get('TravelWith').split(',');
 
@@ -527,6 +557,24 @@ class _MyHomePageState extends State<MyHomePage> {
                 // the App.build method, and use it to set our appbar title.
                 title: Text(widget.title),
                 actions: <Widget>[
+                  if (buildingDoc?.get('Admins').split(',').contains(loggedInUserDoc?.id)||
+                  loggedInUserDoc!.get('Staff'))
+                  Padding(
+                    padding: const EdgeInsets.all(10.0),
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () {
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => const Administration()));
+                      },
+                      icon: const Icon(Icons.admin_panel_settings),
+                      enableFeedback: true,
+                      color: Colors.white,
+                    ),
+                  ),
                   Padding(
                     padding: const EdgeInsets.all(0.0),
                     child: makeDoubleConfirmationButton(
@@ -569,6 +617,7 @@ class _MyHomePageState extends State<MyHomePage> {
                               style: nameStyle,
                             ),
                           const Divider(thickness: 5,),
+                          if ((travelWith.length>1) ||  (travelWith[0].isNotEmpty))
                           const Text('Friends', style: nameStyle,),
                           const Divider(thickness: 5,),
                           ListView.separated(
@@ -578,6 +627,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             separatorBuilder: (context, index) => const Divider(thickness: 5),
                             itemBuilder: (BuildContext context, int row) {
                               DocumentSnapshot<Object?>? thisDoc;
+                              if (travelWith[row].isEmpty) return const Text(' ');
                               try {
                                 thisDoc = allDocs!.firstWhere((doc) => doc.id == travelWith[row]);
                               } catch(e) {
