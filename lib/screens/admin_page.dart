@@ -108,7 +108,8 @@ String getRandomString(int length) =>
     String.fromCharCodes(Iterable.generate(length, (_) => _chars.codeUnitAt(_rnd.nextInt(_chars.length))));
 
 class Administration extends StatefulWidget {
-  const Administration({super.key});
+  final DocumentSnapshot<Object?>? adminCustomerDoc;
+  const Administration( {super.key,required this.adminCustomerDoc});
 
   @override
   AdministrationState createState() => AdministrationState();
@@ -132,8 +133,8 @@ class AdministrationState extends State<Administration> {
   @override
   void initState() {
     super.initState();
-    // print('admin_page, initState');
-    selectedPlayerDoc = loggedInUserDoc;
+    // print('admin_page, initState $loggedInUserDoc');
+    selectedPlayerDoc = widget.adminCustomerDoc;
     initialValues = globalStaticValues();
     for (int i = 0; i < initialValues.length; i++) {
       if (initialValues[i].runtimeType == String) {
@@ -165,6 +166,13 @@ class AdministrationState extends State<Administration> {
   //   });
   // }
 
+  void deleteCustomer(String email)async {
+    print('delete user $email');
+    await FirebaseFirestore.instance.collection(fireStoreCollectionName).doc(buildingId)
+        .collection('Customer').doc(email).delete();
+    print('the actual authentication user with password can not be deleted here');
+
+  }
   void createUser(String newEmail, String fullName) async {
     var foundUser = allDocs!.firstWhereOrNull((doc) => doc.id == newEmail);
     if (foundUser != null){
@@ -223,7 +231,43 @@ class AdministrationState extends State<Administration> {
 
   TextEditingController selectedNameController = TextEditingController();
   String? selectedNameErrorText;
+  OutlinedButton makeDoubleConfirmationButton(
+      {buttonText,
+        buttonColor = Colors.blue,
+        dialogTitle,
+        dialogQuestion,
+        disabled,
+        onOk}) {
+    // print('administration build ${Player.admin1Enabled}');
+    return OutlinedButton(
+        style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.black, backgroundColor: buttonColor),
+        onPressed: disabled
+            ? null
+            : () => showDialog<String>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(dialogTitle),
+              content: Text(dialogQuestion),
+              actions: [
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: const Text('cancel', style: nameStyle)),
+                TextButton(
+                    onPressed: () {
+                      setState(() {
+                        onOk();
+                      });
 
+                      Navigator.pop(context);
+                    },
+                    child: const Text('OK')),
+              ],
+            )),
+        child: Text(buttonText));
+  }
   @override
   Widget build(BuildContext context) {
     bool isAdmin = buildingDoc!.get('Admins').split(',').contains(loggedInUser);
@@ -233,20 +277,7 @@ class AdministrationState extends State<Administration> {
           title: const Text('Administration:'),
           backgroundColor: Colors.brown[400],
           elevation: 0.0,
-          // actions: const [
-          //   IconButton(
-          //     onPressed: null,
-          //     //     () {
-          //     //   Navigator.push(
-          //     //       context,
-          //     //       MaterialPageRoute(
-          //     //           builder: (context) => const History()));
-          //     // },
-          //     icon: Icon(Icons.history),
-          //     enableFeedback: true,
-          //     color: Colors.white,
-          //   ),
-          // ],
+
         ),
         body: ListView(shrinkWrap: true, children: [
           const SizedBox(height: 10),
@@ -260,7 +291,12 @@ class AdministrationState extends State<Administration> {
                 itemCount: globalAttrNames.length,
                 itemBuilder: (BuildContext context, int row) {
                   if (initialValues[row]==null){
-                    return const Divider(thickness: 5, color: Colors.black,);
+                    return Column(
+                      children: [
+                        const Divider(thickness: 5, color: Colors.black,),
+                        Text('Email:${selectedPlayerDoc!.id}', style: nameStyle,),
+                      ],
+                    );
                   }
                   else if (initialValues[row].runtimeType == String) {
                     // print('row:$row, ${initialValues[row]}');
@@ -312,6 +348,16 @@ class AdministrationState extends State<Administration> {
                     return const Text('ERROR unsupported data type');
                   }
                 }),
+            makeDoubleConfirmationButton(
+              buttonText: 'DELETE Customer: ${selectedPlayerDoc!.id}\n ${selectedPlayerDoc!.get('FullName')}',
+              buttonColor: Colors.red[100],
+              dialogTitle: 'Delete a user completely',
+              dialogQuestion: 'Are you sure you want to remove ${selectedPlayerDoc!.id} completely?',
+              disabled: !isAdmin,
+              onOk: () {
+                deleteCustomer(selectedPlayerDoc!.id);
+              }
+            ),
             const Divider(
               color: Colors.black,
               thickness: 6.0,

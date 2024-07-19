@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../constants/constants.dart';
 import '../constants/firebase_setup.dart';
 import 'admin_page.dart';
-
+import 'list_page.dart';
 
 String loggedInUser = '';
 DocumentSnapshot<Object?>? loggedInUserDoc;
@@ -15,7 +15,18 @@ String? buildingId;
 String? inputPresent;
 DocumentSnapshot<Object?>? buildingDoc;
 List<QueryDocumentSnapshot<Object?>>? allDocs;
-
+void setPresent(DocumentSnapshot<Object?> user, bool state) async {
+  if (state == user.get('Present')) return;
+  await FirebaseFirestore.instance
+      .collection(fireStoreCollectionName)
+      .doc(buildingId)
+      .collection('Customer')
+      .doc(user.id)
+      .update({
+    'Present': state,
+    'LastUpdatedBy': loggedInUser,
+  });
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,7 +70,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-   Map? _uriParameters;
+  Map? _uriParameters;
   bool _existingUserChecked = false;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final TextEditingController _emailController = TextEditingController();
@@ -97,7 +108,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _buildingIdNotFound = false;
   void getBuildingDoc() async {
     if (buildingDoc != null) return;
-    if (_inGetBuildingDoc){
+    if (_inGetBuildingDoc) {
       print('ERROR: reentering getBuildingDoc');
       return;
     }
@@ -321,19 +332,6 @@ class _MyHomePageState extends State<MyHomePage> {
         ));
   }
 
-  void setPresent(DocumentSnapshot<Object?> user, bool state) async {
-    if (state == user.get('Present')) return;
-    await FirebaseFirestore.instance
-        .collection(fireStoreCollectionName)
-        .doc(buildingId)
-        .collection('Customer')
-        .doc(user.id)
-        .update({
-      'Present': state,
-      'LastUpdatedBy': loggedInUser,
-    });
-  }
-
   Widget showInOut(DocumentSnapshot<Object?> userDoc) {
     return Column(children: [
       // const Divider(
@@ -363,7 +361,6 @@ class _MyHomePageState extends State<MyHomePage> {
                       },
                       icon: const Icon(Icons.house_outlined)),
                 ),
-
               ],
             ),
             Column(
@@ -382,7 +379,6 @@ class _MyHomePageState extends State<MyHomePage> {
                       },
                       icon: const Icon(Icons.exit_to_app)),
                 ),
-
               ],
             ),
           ],
@@ -407,7 +403,6 @@ class _MyHomePageState extends State<MyHomePage> {
                       },
                       icon: const Icon(Icons.insert_emoticon)),
                 ),
-
               ],
             ),
             Column(
@@ -426,7 +421,6 @@ class _MyHomePageState extends State<MyHomePage> {
                       },
                       icon: const Icon(Icons.exit_to_app)),
                 ),
-
               ],
             ),
           ],
@@ -535,7 +529,7 @@ class _MyHomePageState extends State<MyHomePage> {
           if (!snapshot.hasData) return const CircularProgressIndicator();
 
           if (snapshot.data == null) return const CircularProgressIndicator();
-          if (snapshot.requireData.docs.length<=1) return const CircularProgressIndicator();
+          if (snapshot.requireData.docs.length <= 1) return const CircularProgressIndicator();
 
           allDocs = snapshot.requireData.docs;
           // print('allDocs1: ${allDocs![0].id}');
@@ -543,7 +537,6 @@ class _MyHomePageState extends State<MyHomePage> {
           loggedInUserDoc = allDocs!.firstWhere((doc) => doc.id == loggedInUser);
 
           if (loggedInUserDoc == null) return Text('Cannot find a customer with email $loggedInUser');
-
 
           List<String> travelWith = loggedInUserDoc!.get('TravelWith').split(',');
 
@@ -557,24 +550,24 @@ class _MyHomePageState extends State<MyHomePage> {
                 // the App.build method, and use it to set our appbar title.
                 title: Text(widget.title),
                 actions: <Widget>[
-                  if (buildingDoc?.get('Admins').split(',').contains(loggedInUserDoc?.id)||
-                  loggedInUserDoc!.get('Staff'))
-                  Padding(
-                    padding: const EdgeInsets.all(10.0),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () {
-                        Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => const Administration()));
-                      },
-                      icon: const Icon(Icons.admin_panel_settings),
-                      enableFeedback: true,
-                      color: Colors.white,
+                  if (buildingDoc?.get('Admins').split(',').contains(loggedInUserDoc?.id) ||
+                      loggedInUserDoc!.get('Staff'))
+                    Padding(
+                      padding: const EdgeInsets.all(10.0),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () {
+                          Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => Administration(adminCustomerDoc: loggedInUserDoc)));
+                        },
+                        icon: const Icon(Icons.admin_panel_settings),
+                        enableFeedback: true,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
                   Padding(
                     padding: const EdgeInsets.all(0.0),
                     child: makeDoubleConfirmationButton(
@@ -616,10 +609,17 @@ class _MyHomePageState extends State<MyHomePage> {
                               "STAFF: ${loggedInUserDoc!.get('Staff')}",
                               style: nameStyle,
                             ),
-                          const Divider(thickness: 5,),
-                          if ((travelWith.length>1) ||  (travelWith[0].isNotEmpty))
-                          const Text('Friends', style: nameStyle,),
-                          const Divider(thickness: 5,),
+                          const Divider(
+                            thickness: 5,
+                          ),
+                          if ((travelWith.length > 1) || (travelWith[0].isNotEmpty))
+                            const Text(
+                              'Friends',
+                              style: nameStyle,
+                            ),
+                          const Divider(
+                            thickness: 5,
+                          ),
                           ListView.separated(
                             scrollDirection: Axis.vertical,
                             shrinkWrap: true,
@@ -630,12 +630,38 @@ class _MyHomePageState extends State<MyHomePage> {
                               if (travelWith[row].isEmpty) return const Text(' ');
                               try {
                                 thisDoc = allDocs!.firstWhere((doc) => doc.id == travelWith[row]);
-                              } catch(e) {
-                                return Text('Friend: ${travelWith[row]} invalid', style: nameStyle,);
+                              } catch (e) {
+                                return Text(
+                                  'Friend: ${travelWith[row]} invalid',
+                                  style: nameStyle,
+                                );
                               }
 
                               return showInOut(thisDoc);
                             },
+                          ),
+                          const SizedBox(height: 8,),
+                          const Divider(thickness: 5, color: Colors.pink,),
+                          InkWell(
+                            onTap: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (context) => const ListPage()));
+                              setState(() {});
+                            },
+                            child: const Padding(
+                              padding: EdgeInsets.all(10.0),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.list,
+                                    size: 60,
+                                  ),
+                                  Text(
+                                    ' List View',
+                                    style: nameStyle,
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                         ],
                       ),
